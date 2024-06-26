@@ -1,4 +1,4 @@
-# VManager
+# Ansible Template for virtual machines
 
 A set of Ansible playbooks to create and provison virtual machines on the vCenter platform.
 
