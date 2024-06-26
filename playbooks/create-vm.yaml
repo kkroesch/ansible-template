@@ -1,0 +1,45 @@
+- name: Create and Provision VMWare VM
+  hosts: localhost
+  gather_facts: no
+
+  vars_files:
+    - vars-development.yaml
+    - secrets.yaml
+
+  vars:
+    template_name: sles-15.5-ktag-template
+    #vm_ip: your_vm_ip
+    #vm_netmask: your_netmask
+    #vm_gateway: your_gateway
+    #vm_dns: your_dns
+
+  tasks:
+    - name: Create VM from template
+      community.vmware.vmware_guest:
+        hostname: "{{ vcenter_hostname }}"
+        username: "{{ vcenter_username }}"
+        password: "{{ vcenter_password }}"
+        validate_certs: no
+        datacenter: "{{ datacenter_name }}"
+        cluster: "{{ cluster_name }}"
+        datastore: "{{ datastore_name }}"
+        folder: "{{ vm_folder }}"
+        template: "{{ template_name }}"
+        name: "{{ hostvars[item].vm_name }}"
+        #networks:
+          #- name: "{{ vm_network }}"
+          #ip: "{{ vm_ip }}"
+          #netmask: "{{ vm_netmask }}"
+          #gateway: "{{ vm_gateway }}"
+          #dns_servers:
+          #- "{{ vm_dns }}"
+        state: poweredon
+        wait_for_ip_address: true
+      delegate_to: localhost
+      loop: "{{ groups['all'] }}"
+      register: vm_info
+
+    - name: Export information about VMs
+      copy:
+        content: "{{ vm_info | to_json }}"
+        dest: "vm_info.json"

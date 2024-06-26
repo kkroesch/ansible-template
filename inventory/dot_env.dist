@@ -1,0 +1,5 @@
+DB_SERVER = 'your.database.srv'
+DB_PORT = 1433
+DB_USER = 'database_user'
+DB_PASSWORD = 'correct battery horse staple'
+DB_DATABASE = 'your_database'

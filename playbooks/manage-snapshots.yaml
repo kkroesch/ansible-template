@@ -1,0 +1,46 @@
+- name: Manage Snapshots of VMWare VM
+  hosts: localhost
+  gather_facts: no
+
+  vars_files:
+    - vars-development.yml
+    - secrets.yaml
+  
+  vars:
+    snapshot_age_limit_days: 30
+
+  tasks:
+    - name: Get current date and time
+      command: date "+%Y-%m-%dT%H:%M:%S"
+      register: current_date
+
+    - name: Get snapshots of the VM
+      community.vmware.vmware_guest_snapshot_info:
+        hostname: "{{ vcenter_hostname }}"
+        username: "{{ vcenter_username }}"
+        password: "{{ vcenter_password }}"
+        validate_certs: no
+        datacenter: "{{ datacenter_name }}"
+        folder: "{{ vm_folder }}"
+        name: "{{ vm_name }}"
+      delegate_to: localhost
+      register: snapshot_info
+    
+    - name: Display snapshots
+      debug:
+        msg: "{{ snapshot_info.snapshots }}"
+
+    - name: Find and delete old snapshots
+      community.vmware.vmware_guest_snapshot:
+        hostname: "{{ vcenter_hostname }}"
+        username: "{{ vcenter_username }}"
+        password: "{{ vcenter_password }}"
+        validate_certs: no
+        datacenter: "{{ datacenter_name }}"
+        folder: "{{ vm_folder }}"
+        name: "{{ vm_name }}"
+        state: absent
+        snapshot_name: "{{ item.name }}"
+      delegate_to: localhost
+      with_items: "{{ snapshot_info.snapshots | selectattr('create_time', 'is_lt', current_date.stdout | to_datetime('%Y-%m-%dT%H:%M:%S') - snapshot_age_limit_days | to_datetime('%Y-%m-%dT%H:%M:%S') | timestamp_local) | list }}"
+      when: item.name != '_currentSnapshot'

@@ -1,0 +1,32 @@
+- name: Delete VMWare VM
+  hosts: localhost
+  gather_facts: no
+
+  vars_files:
+    - vars-development.yaml
+    - secrets.yaml
+
+  tasks:
+    - name: Power off the VM if it is running
+      community.vmware.vmware_guest_powerstate:
+        hostname: "{{ vcenter_hostname }}"
+        username: "{{ vcenter_username }}"
+        password: "{{ vcenter_password }}"
+        validate_certs: no
+        datacenter: "{{ datacenter_name }}"
+        folder: "{{ vm_folder }}"
+        name: "{{ vm_name }}"
+        state: powered-off
+      delegate_to: localhost
+
+    - name: Delete the VM
+      community.vmware.vmware_guest:
+        hostname: "{{ vcenter_hostname }}"
+        username: "{{ vcenter_username }}"
+        password: "{{ vcenter_password }}"
+        validate_certs: no
+        datacenter: "{{ datacenter_name }}"
+        folder: "{{ vm_folder }}"
+        name: "{{ vm_name }}"
+        state: absent
+      delegate_to: localhost
