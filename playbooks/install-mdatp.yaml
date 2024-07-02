@@ -1,0 +1,14 @@
+---
+- name: Apply mdatp role to threatprotect group
+  hosts: threatprotect
+  remote_user: smadm
+  become: yes
+
+  roles:
+  - mdatp
+
+  tasks:
+  - name: Debug message
+    debug:
+      msg: "mdatp role has been applied on {{ inventory_hostname }}"
+
