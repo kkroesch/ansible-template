@@ -12,6 +12,11 @@
         state: latest
       register: update_result
 
+    - name: Import Microsoft GPG key
+      rpm_key:
+        state: present
+        key: https://packages.microsoft.com/keys/microsoft.asc
+
     - name: Install Microsoft Defender mdatp
       package:
         name: mdatp
