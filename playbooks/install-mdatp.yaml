@@ -4,11 +4,46 @@
   remote_user: smadm
   become: yes
 
-  roles:
-  - mdatp
-
   tasks:
-  - name: Debug message
-    debug:
-      msg: "mdatp role has been applied on {{ inventory_hostname }}"
 
+    - name: Update package repository with zypper
+      package:
+        name: '*'
+        state: latest
+      register: update_result
+
+    - name: Install Microsoft Defender mdatp
+      package:
+        name: mdatp
+        state: present
+      when: update_result is succeeded
+
+    - name: Create /etc/opt/microsoft/mdatp directory
+      file:
+        path: /etc/opt/microsoft/mdatp
+        state: directory
+        owner: root
+        group: root
+        mode: '0755'
+
+    - name: Create /etc/opt/microsoft/mdatp/managed directory
+      file:
+        path: /etc/opt/microsoft/mdatp/managed
+        state: directory
+        owner: root
+        group: root
+        mode: '0755'
+
+    - name: Copy onboarding config in place
+      copy:
+        src: mdatp_onboard.json
+        dest: /etc/opt/microsoft/mdatp
+
+    - name: Copy profile in place
+      copy:
+        src: mdatp_managed.json
+        dest: /etc/opt/microsoft/mdatp/managed
+
+    - name: Restart Defender to enable onboarding
+      systemd:
+        name: mdatp.service
