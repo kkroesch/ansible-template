@@ -4,6 +4,9 @@
   remote_user: smadm
   become: yes
 
+  var_filess:
+    - ../secrets.yaml
+
   tasks:
 
     - name: Update package repository with zypper
