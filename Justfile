@@ -16,3 +16,9 @@ lint playbook:
 vminfo:
     @jq -r '[.results[].instance | { vm_name: .hw_name, ip_address: .ipv4 }]' playbooks/vm_info.json | yq e -P
 
+bwplay book:
+    @ansible-playbook --vault-password-file <(rbw get ansible/vaultpass) {{ book }} 
+
+play book:
+    @ansible-playbook playbooks/{{ book }}.yaml
+

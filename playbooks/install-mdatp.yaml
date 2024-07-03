@@ -4,7 +4,7 @@
   remote_user: smadm
   become: yes
 
-  var_filess:
+  vars_files:
     - ../secrets.yaml
 
   tasks:
@@ -16,7 +16,7 @@
       register: update_result
 
     - name: Import Microsoft GPG key
-      rpm_key:
+      ansible.builtin.rpm_key:
         state: present
         key: https://packages.microsoft.com/keys/microsoft.asc
 
@@ -46,11 +46,17 @@
       copy:
         src: mdatp_onboard.json
         dest: /etc/opt/microsoft/mdatp
+        owner: root
+        group: root
+        mode: '0600'
 
     - name: Copy profile in place
       copy:
         src: mdatp_managed.json
         dest: /etc/opt/microsoft/mdatp/managed
+        owner: root
+        group: root
+        mode: '0644'
 
     - name: Restart Defender to enable onboarding
       systemd:
