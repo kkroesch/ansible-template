@@ -1,3 +1,5 @@
+bwplay book:
+    @ansible-playbook --vault-password-file <(rbw get ansible/vaultpass) {{ book }} 
 
 create vm_name:
     @ansible-playbook playbooks/create-vm.yaml -e vm_name={{ vm_name }}
@@ -21,4 +23,3 @@ bwplay book:
 
 play book:
     @ansible-playbook playbooks/{{ book }}.yaml
-
