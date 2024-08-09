@@ -1,0 +1,63 @@
+---
+- name: Apply mdatp role to threatprotect group
+  hosts: threatprotect
+  remote_user: smadm
+  become: yes
+
+  vars_files:
+    - ../secrets.yaml
+
+  tasks:
+
+    - name: Update package repository with zypper
+      package:
+        name: '*'
+        state: latest
+      register: update_result
+
+    - name: Import Microsoft GPG key
+      ansible.builtin.rpm_key:
+        state: present
+        key: https://packages.microsoft.com/keys/microsoft.asc
+
+    - name: Install Microsoft Defender mdatp
+      package:
+        name: mdatp
+        state: present
+      when: update_result is succeeded
+
+    - name: Create /etc/opt/microsoft/mdatp directory
+      file:
+        path: /etc/opt/microsoft/mdatp
+        state: directory
+        owner: root
+        group: root
+        mode: '0755'
+
+    - name: Create /etc/opt/microsoft/mdatp/managed directory
+      file:
+        path: /etc/opt/microsoft/mdatp/managed
+        state: directory
+        owner: root
+        group: root
+        mode: '0755'
+
+    - name: Copy onboarding config in place
+      copy:
+        src: mdatp_onboard.json
+        dest: /etc/opt/microsoft/mdatp
+        owner: root
+        group: root
+        mode: '0600'
+
+    - name: Copy profile in place
+      copy:
+        src: mdatp_managed.json
+        dest: /etc/opt/microsoft/mdatp/managed
+        owner: root
+        group: root
+        mode: '0644'
+
+    - name: Restart Defender to enable onboarding
+      systemd:
+        name: mdatp.service

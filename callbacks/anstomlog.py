@@ -7,26 +7,58 @@ import sys
 import os
 from datetime import datetime
 
-try:
-    from ansible.utils.color import colorize, hostcolor
-    from ansible.plugins.callback import CallbackBase
-    from ansible import constants as C
-except ImportError:
-    class CallbackBase:
-        # pylint: disable=I0011,R0903
-        pass
-    class C:
-        COLOR_OK = 'green'
+from ansible.utils.color import colorize, hostcolor, ANSIBLE_COLOR
+from ansible.plugins.callback import CallbackBase
+from ansible import constants as C
+from ansible.vars.clean import strip_internal_keys, module_response_deepcopy
+from ansible.parsing.ajson import AnsibleJSONEncoder
 
 import unittest
+
+DOCUMENTATION = r'''
+options:
+    display_skipped_hosts:
+        name: Show skipped hosts
+        description: "Toggle to control displaying skipped task/host results in a task"
+        type: bool
+        default: yes
+        env:
+            - name: ANSIBLE_DISPLAY_SKIPPED_HOSTS
+        ini:
+            - key: display_skipped_hosts
+              section: defaults
+    display_ok_hosts:
+        name: Show 'ok' hosts
+        description: "Toggle to control displaying 'ok' task/host results in a task"
+        type: bool
+        default: yes
+        env:
+            - name: ANSIBLE_DISPLAY_OK_HOSTS
+        ini:
+            - key: display_ok_hosts
+              section: defaults
+    dump_loop_items:
+        name: Dump loop items
+        description: "Show the details of loop executions"
+        type: bool
+        default: no
+        env:
+            - name: ANSIBLE_DUMP_LOOP_ITEMS
+        ini:
+            - key: dump_loop_items
+              section: defaults
+'''
+
 
 # Fields we would like to see before the others, in this order, please...
 PREFERED_FIELDS = ['stdout', 'rc', 'stderr', 'start', 'end', 'msg']
 # Fields we will delete from the result
 DELETABLE_FIELDS = [
     'stdout', 'stdout_lines', 'rc', 'stderr', 'start', 'end', 'msg',
-    '_ansible_verbose_always', '_ansible_no_log', 'invocation', '_ansible_parsed',
-    '_ansible_item_result', '_ansible_ignore_errors', '_ansible_item_label']
+    '_ansible_verbose_always', '_ansible_no_log', 'invocation',
+    '_ansible_parsed', '_ansible_item_result', '_ansible_ignore_errors',
+    '_ansible_item_label']
+
 
 def deep_serialize(data, indent=0):
     # pylint: disable=I0011,E0602,R0912,W0631
@@ -229,10 +261,12 @@ class CallbackModule(CallbackBase):
     def v2_playbook_on_task_start(self, task, is_conditional):
         parentTask = task.get_first_parent_include()
         if parentTask is not None:
-            sectionName = task._role.get_name()
             if parentTask.action.endswith('tasks'):
-                sectionName = os.path.splitext(os.path.basename(task.get_path()))[0]
-            self._open_section("  ↳ {} : {}".format(sectionName, task.name))
+                parentTaskName = os.path.splitext(os.path.basename(task.get_path()))[0]
+                self._open_section("    ↳ {}: {}".format(parentTaskName, task.name))
+            else:
+                sectionName = task._role.get_name()
+                self._open_section("  ↳ {}: {}".format(sectionName, task.name))
         else:
             self._open_section(task.get_name(), task.get_path())
 
@@ -245,7 +279,7 @@ class CallbackModule(CallbackBase):
         if self._display.verbosity > 1:
             if path:
                 self._emit_line("[{}]: {}".format(ts, path))
-        self.task_start_preamble = "[{}]{} {} ...".format(ts, prefix, section_name)
+        self.task_start_preamble = "[{}]{} {}\n".format(ts, prefix, section_name)
         sys.stdout.write(self.task_start_preamble)
 
     def v2_playbook_on_handler_task_start(self, task):
@@ -304,37 +338,61 @@ class CallbackModule(CallbackBase):
 
     def v2_runner_on_ok(self, result):
         duration = self._get_duration()
-
-        self._clean_results(result._result, result._task.action)
-
         host_string = self._host_string(result)
-
-        self._clean_results(result._result, result._task.action)
-
-        if result._task.action in ('include', 'include_role', 'include_tasks'):
-            sys.stdout.write("\b\b\b\b ")
-            if result._task.action in ('include', 'include_role'):
-                sys.stdout.write("    \n")
-            return
-
+        display_ok = self.get_option("display_ok_hosts")
         msg, color = self._changed_or_not(result._result, host_string)
 
-        if result._task.loop and self._display.verbosity > 0 and 'results' in result._result:
-            for item in result._result['results']:
+        if not display_ok:
+            return
+
+        verbose = '_ansible_verbose_always' in result._result
+        no_verbose_override = '_ansible_verbose_override' not in result._result
+
+        abridged_result = strip_internal_keys(module_response_deepcopy(result._result))
+        if self._display.verbosity < 3 and 'invocation' in abridged_result:
+            del abridged_result['invocation']
+
+        # remove diff information from screen output
+        if self._display.verbosity < 3 and 'diff' in abridged_result:
+            del abridged_result['diff']
+
+        # remove exception from screen output
+        if 'exception' in abridged_result:
+            del abridged_result['exception']
+
+        if (self.get_option("dump_loop_items") or \
+                self._display.verbosity > 0) \
+                and result._task.loop \
+                and 'results' in result._result:
+            # remove invocation unless specifically wanting it
+            for item in abridged_result['results']:
                 msg, color = self._changed_or_not(item, host_string)
-                item_msg = "%s - item=%s" % (msg, self._get_item(item))
+                del item['ansible_loop_var']
+                del item['failed']
+                del item['changed']
+                item_msg = "%s - item=%s" % (msg, item)
                 self._emit_line("%s | %s" %
                                 (item_msg, duration), color=color)
         else:
-            self._emit_line("%s | %s" %
+            for key in ['failed', 'changed']:
+                if key in abridged_result:
+                    del abridged_result[key]
+
+            self._emit_line("↳  %s | %s" %
                             (msg, duration), color=color)
+            if ((self._display.verbosity > 0
+                    or verbose)
+                    and no_verbose_override):
+                self._emit_line(deep_serialize(abridged_result), color=color)
+
+        self._clean_results(result._result, result._task.action)
         self._handle_warnings(result._result)
 
-        if ((self._display.verbosity > 0 or '_ansible_verbose_always' in result._result)
-                and not '_ansible_verbose_override' in result._result):
-            self._emit_line(deep_serialize(result._result), color=color)
-
         result._preamble = self.task_start_preamble
+
+    def eat(self, count=4):
+        if ANSIBLE_COLOR:
+            sys.stdout.write(count*"\b")
 
     @staticmethod
     def _changed_or_not(result, host_string):
@@ -353,17 +411,28 @@ class CallbackModule(CallbackBase):
             self._open_section("system")
 
         if self.task_start_preamble.endswith(" ..."):
-            sys.stdout.write("\b\b\b\b | ")
+            self.eat()
+            self.stdout.write(" | ")
             self.task_start_preamble = " "
 
         for line in lines.splitlines():
             self._display.display(line, color=color)
 
     def v2_runner_on_unreachable(self, result):
-        self._emit_line('{} | UNREACHABLE!: {}'.format(
-            self._host_string(result), result._result.get('msg', '')), color=C.COLOR_CHANGED)
+        line = '{} | UNREACHABLE!: {}'.format(
+            self._host_string(result), result._result.get('msg', ''))
+
+
+        if result._task.ignore_unreachable:
+            line = line + " | IGNORED"
+
+        self._emit_line(line, C.COLOR_SKIP)
 
     def v2_runner_on_skipped(self, result):
+        display_skipped = self.get_option('display_skipped_hosts')
+        if not display_skipped:
+            return
+
         duration = self._get_duration()
 
         self._emit_line("%s | SKIPPED | %s" %
@@ -386,23 +455,20 @@ class CallbackModule(CallbackBase):
         for h in hosts:
             t = stats.summarize(h)
 
-            self._emit_line(u"%s : %s %s %s %s" % (
+            self._emit_line(u"%s : %s %s %s %s %s %s %s" % (
                 hostcolor(h, t),
                 colorize(u'ok', t['ok'], C.COLOR_OK),
                 colorize(u'changed', t['changed'], C.COLOR_CHANGED),
                 colorize(u'unreachable', t['unreachable'], C.COLOR_UNREACHABLE),
-                colorize(u'failed', t['failures'], C.COLOR_ERROR)))
+                colorize(u'failed', t['failures'], C.COLOR_ERROR),
+                colorize(u'skipped', t['skipped'], C.COLOR_SKIP),
+                colorize(u'rescued', t['rescued'], C.COLOR_OK),
+                colorize(u'ignored', t['ignored'], C.COLOR_WARN)))
 
     def __init__(self, *args, **kwargs):
         super(CallbackModule, self).__init__(*args, **kwargs)
         self.task_started = datetime.now()
         self.task_start_preamble = None
-        # python2 only
-        try:
-            reload(sys).setdefaultencoding('utf8')
-        # pylint: disable=W0702
-        except:
-            pass
 
 
 if __name__ == '__main__':

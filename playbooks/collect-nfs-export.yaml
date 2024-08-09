@@ -1,0 +1,37 @@
+---
+- name: NFS-Freigaben ermitteln und in CSV speichern
+  hosts: all
+  remote_user: smadm
+  become: true
+
+  vars_files:
+    - ../secrets.yaml
+
+  tasks:
+    - name: Überprüfen, ob /etc/exports existiert
+      stat:
+        path: /etc/exports
+      register: exports_file
+
+    - name: Lese NFS-Freigaben aus /etc/exports
+      when: exports_file.stat.exists
+      shell: cat /etc/exports
+      register: nfs_exports
+
+    - name: Verarbeite und speichere NFS-Freigaben in einer CSV-Datei
+      when: exports_file.stat.exists
+      lineinfile:
+        path: /tmp/nfs_exports.csv
+        line: "{{ inventory_hostname }},{{ item.split()[0] }},{{ item.split()[1].split('(')[0] }},{{ item.split('(')[1].split(')')[0] }}"
+      loop: "{{ nfs_exports.stdout_lines }}"
+      delegate_to: localhost
+      run_once: true
+
+    - name: Füge einen Platzhalter hinzu, wenn keine Freigaben vorhanden sind
+      when: not exports_file.stat.exists
+      lineinfile:
+        path: /tmp/nfs_exports.csv
+        line: "{{ inventory_hostname }},,,"
+      delegate_to: localhost
+      run_once: true
+

@@ -1,0 +1,3 @@
+[submodule "roles/mdatp"]
+	path = roles/mdatp
+	url = https://git.ag.ch/se/mdatp
