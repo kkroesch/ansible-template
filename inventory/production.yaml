@@ -1,10 +1,10 @@
+# Inventory for SUSE Linux Enterprise
+#
+
 all:
-
-  vars:
-    ansible_connection: ssh
-    ansible_user: smadm
-
-  hosts:
-    svuas00080:
-      ansible_host: 10.5.6.228
-    
+  children:
+    cloud:
+      hosts:
+        www1.kroesch.net:
+        www2.kroesch.net:
+        www15.kroesch.net:

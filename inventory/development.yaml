@@ -1,10 +1,6 @@
 all:
-  hosts:
-    sppas00016b:
-      vm_name: sppas00016b.ads.ktag.ch
-      ansible_user: smadm
-
-    sppas00017b:
-      vm_name: sppas00017b.ads.ktag.ch
-      ansible_user: smadm
-
+  children:
+    webservers:
+      hosts:
+        www.dev.kroesch.net:
+        db.dev.kroesch.net:
