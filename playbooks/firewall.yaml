@@ -1,0 +1,63 @@
+---
+- name: Configure firewalld to block all ports except 22, 80, 443, 3389, 3390
+  hosts: all
+  become: yes
+  tasks:
+    - name: Ensure firewalld is installed
+      dnf:
+        name: firewalld
+        state: present
+
+    - name: Ensure firewalld is running and enabled
+      systemd:
+        name: firewalld
+        state: started
+        enabled: yes
+
+    - name: Set default zone to block
+      firewalld:
+        immediate: yes
+        permanent: yes
+        zone: block
+        state: enabled
+        default: yes
+
+    - name: Open port 22 (SSH)
+      firewalld:
+        port: 22/tcp
+        zone: block
+        permanent: yes
+        state: enabled
+
+    - name: Open port 80 (HTTP)
+      firewalld:
+        port: 80/tcp
+        zone: block
+        permanent: yes
+        state: enabled
+
+    - name: Open port 443 (HTTPS)
+      firewalld:
+        port: 443/tcp
+        zone: block
+        permanent: yes
+        state: enabled
+
+    - name: Open port 3389 (RDP)
+      firewalld:
+        port: 3389/tcp
+        zone: block
+        permanent: yes
+        state: enabled
+
+    - name: Open port 3390 (RDP)
+      firewalld:
+        port: 3390/tcp
+        zone: block
+        permanent: yes
+        state: enabled
+
+    - name: Reload firewalld to apply changes
+      firewalld:
+        state: reloaded
+
